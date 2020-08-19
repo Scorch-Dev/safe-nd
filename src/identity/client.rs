@@ -7,21 +7,24 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use crate::keys::BlsKeypair;
-use crate::{utils, Ed25519Digest, Error, Keypair, PublicKey, Signature, XorName};
+use crate::keys::{BlsKeypair, SignatureShare};
+use crate::{utils, Error, Keypair, PublicKey, Signature};
 use ed25519_dalek::Keypair as Ed25519Keypair;
 use multibase::Decodable;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use signature::Signer;
 use std::fmt::{self, Debug, Display, Formatter};
 use threshold_crypto::{
-    serde_impl::SerdeSecret, SecretKey as BlsSecretKey, SecretKeyShare as BlsSecretKeyShare,
+    serde_impl::SerdeSecret,
+    SecretKey as BlsSecretKey, //SecretKeyShare as BlsSecretKeyShare,
 };
+use xor_name::XorName;
 
 /// A struct holding a keypair variant and the corresponding public ID for a network Client.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FullId {
-    pub(super) keypair: Keypair,
+    keypair: Keypair,
     public_id: PublicId,
 }
 
@@ -48,29 +51,42 @@ impl FullId {
         Self { keypair, public_id }
     }
 
-    /// Constructs a `FullId` from a BLS secret key share.
-    pub fn new_bls_share(bls_secret_key_share: BlsSecretKeyShare) -> Self {
-        let keypair = Keypair::new_bls_share(bls_secret_key_share);
-        let public_key = keypair.public_key();
-        let public_id = PublicId {
-            name: public_key.into(),
-            public_key,
-        };
-        Self { keypair, public_id }
-    }
+    // /// Constructs a `FullId` from a BLS secret key share.
+    // pub fn new_bls_share(bls_secret_key_share: BlsSecretKeyShare) -> Self {
+    //     let keypair = Keypair::new_bls_share(bls_secret_key_share);
+    //     let public_key = keypair.public_key();
+    //     let public_id = PublicId {
+    //         name: public_key.into(),
+    //         public_key,
+    //     };
+    //     Self { keypair, public_id }
+    // }
 
     /// Creates a detached signature of `data`.
     pub fn sign<T: AsRef<[u8]>>(&self, data: T) -> Signature {
         match &self.keypair {
-            Keypair::Ed25519(keys) => Signature::Ed25519(keys.sign::<Ed25519Digest>(data.as_ref())),
+            Keypair::Ed25519(keys) => Signature::Ed25519(keys.sign(data.as_ref())),
             Keypair::Bls(keys) => Signature::Bls(keys.secret.inner().sign(data)),
-            Keypair::BlsShare(keys) => Signature::BlsShare(keys.secret.inner().sign(data)),
+            Keypair::BlsShare(keys) => Signature::BlsShare(SignatureShare {
+                index: keys.index,
+                share: keys.secret.inner().sign(data),
+            }),
         }
     }
 
     /// Returns the public ID.
     pub fn public_id(&self) -> &PublicId {
         &self.public_id
+    }
+
+    /// Returns the PublicKey of the PublicId.
+    pub fn public_key(&self) -> &PublicKey {
+        &self.public_id.public_key()
+    }
+
+    /// Returns a reference to the Keypair
+    pub fn keypair(&self) -> &Keypair {
+        &self.keypair
     }
 }
 
@@ -102,12 +118,12 @@ impl From<Ed25519Keypair> for FullId {
     }
 }
 
-// This is required so we can have `impl Into<FullId>` as a function parameter
-impl From<BlsSecretKeyShare> for FullId {
-    fn from(bls_secret_key_share: BlsSecretKeyShare) -> Self {
-        Self::new_bls_share(bls_secret_key_share)
-    }
-}
+// // This is required so we can have `impl Into<FullId>` as a function parameter
+// impl From<BlsSecretKeyShare> for FullId {
+//     fn from(bls_secret_key_share: BlsSecretKeyShare) -> Self {
+//         Self::new_bls_share(bls_secret_key_share)
+//     }
+// }
 
 /// A struct representing the public identity of a network Client.
 ///

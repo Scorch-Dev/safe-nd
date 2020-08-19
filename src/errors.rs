@@ -15,7 +15,7 @@ use std::{
     result,
 };
 
-/// A specialised `Result` type for safecoin.
+/// A specialised `Result` type.
 pub type Result<T> = result::Result<T, Error>;
 
 /// Error debug struct
@@ -65,7 +65,7 @@ pub enum Error {
     /// Invalid version for performing a given mutating operation. Contains the
     /// current permissions version.
     InvalidPermissionsSuccessor(u64),
-    /// Invalid Operation such as a POST on ImmutableData
+    /// Invalid Operation such as a POST on Blob
     InvalidOperation,
     /// Mismatch between key type and signature type.
     SigningKeyTypeMismatch,
@@ -79,16 +79,20 @@ pub enum Error {
     /// While parsing, precision would be lost.
     LossOfPrecision,
     /// The coin amount would exceed
-    /// [the maximum value for `Coins`](constant.MAX_COINS_VALUE.html).
+    /// [the maximum value for `Money`](constant.MAX_MONEY_VALUE.html).
     ExcessiveValue,
-    /// Failed to parse the string as [`Coins`](struct.Coins.html).
+    /// Failed to parse the string as [`Money`](struct.Money.html).
     FailedToParse(String),
-    /// Transaction ID already exists.
-    TransactionIdExists,
-    /// Insufficient coins.
+    /// Transfer ID already exists.
+    TransferIdExists,
+    /// Insufficient money.
     InsufficientBalance,
     /// Inexistent balance.
     NoSuchBalance,
+    /// Inexistent sender balance.
+    NoSuchSender,
+    /// Inexistent recipient balance.
+    NoSuchRecipient,
     /// Coin balance already exists.
     BalanceExists,
     /// Expected data size exceeded.
@@ -135,18 +139,20 @@ impl Display for Error {
             Error::InvalidSignature => write!(f, "Failed signature validation"),
             Error::NetworkOther(ref error) => write!(f, "Error on Vault network: {}", error),
             Error::LossOfPrecision => {
-                write!(f, "Lost precision on the number of coins during parsing")
+                write!(f, "Lost precision on the amount of money during parsing")
             }
             Error::ExcessiveValue => write!(
                 f,
-                "Overflow on number of coins (check the MAX_COINS_VALUE const)"
+                "Overflow on amount of money (check the MAX_MONEY_VALUE const)"
             ),
             Error::FailedToParse(ref error) => {
                 write!(f, "Failed to parse from a string: {}", error)
             }
-            Error::TransactionIdExists => write!(f, "Transaction with a given ID already exists"),
-            Error::InsufficientBalance => write!(f, "Not enough coins to complete this operation"),
+            Error::TransferIdExists => write!(f, "Transfer with a given ID already exists"),
+            Error::InsufficientBalance => write!(f, "Not enough money to complete this operation"),
             Error::NoSuchBalance => write!(f, "Balance does not exist"),
+            Error::NoSuchSender => write!(f, "Sender does not exist"),
+            Error::NoSuchRecipient => write!(f, "Recipient does not exist"),
             Error::BalanceExists => write!(f, "Balance already exists"),
             Error::DuplicateMessageId => write!(f, "MessageId already exists"),
             Error::ExceededSize => write!(f, "Size of the structure exceeds the limit"),
@@ -175,14 +181,16 @@ impl error::Error for Error {
             Error::SigningKeyTypeMismatch => "Key type and signature type mismatch",
             Error::InvalidSignature => "Invalid signature",
             Error::NetworkOther(ref error) => error,
-            Error::LossOfPrecision => "Lost precision on the number of coins during parsing",
+            Error::LossOfPrecision => "Lost precision on the amount of money during parsing",
             Error::ExcessiveValue => {
-                "Overflow on number of coins (check the MAX_COINS_VALUE const)"
+                "Overflow on amount of money (check the MAX_MONEY_VALUE const)"
             }
             Error::FailedToParse(_) => "Failed to parse entity",
-            Error::TransactionIdExists => "Transaction with a given ID already exists",
-            Error::InsufficientBalance => "Not enough coins to complete this operation",
+            Error::TransferIdExists => "Transfer with a given ID already exists",
+            Error::InsufficientBalance => "Not enough money to complete this operation",
             Error::NoSuchBalance => "Balance does not exist",
+            Error::NoSuchSender => "Sender does not exist",
+            Error::NoSuchRecipient => "Recipient does not exist",
             Error::BalanceExists => "Balance already exists",
             Error::DuplicateMessageId => "MessageId already exists",
             Error::ExceededSize => "Exceeded the size limit",

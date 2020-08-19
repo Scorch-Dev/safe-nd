@@ -28,79 +28,82 @@
     unused_results
 )]
 
-mod coins;
+mod blob;
 mod errors;
 mod identity;
-mod immutable_data;
 mod keys;
-mod mutable_data;
-mod request;
-mod response;
+mod map;
+mod messaging;
+mod money;
+mod rewards;
 mod sequence;
+mod transfer;
 mod utils;
 
-pub use coins::Coins;
+pub use blob::{
+    Address as BlobAddress, Data as Blob, Kind as BlobKind, PrivateData as PrivateBlob,
+    PublicData as PublicBlob, MAX_BLOB_SIZE_IN_BYTES,
+};
 pub use errors::{EntryError, Error, Result};
 pub use identity::{
-    app::{FullId as AppFullId, PublicId as AppPublicId},
     client::{FullId as ClientFullId, PublicId as ClientPublicId},
-    node::{FullId as NodeFullId, PublicId as NodePublicId},
+    node::{FullId as NodeFullId, NodeKeypairs, PublicId as NodePublicId},
     PublicId,
 };
-pub use immutable_data::{
-    Address as IDataAddress, Data as IData, Kind as IDataKind, PubData as PubImmutableData,
-    UnpubData as UnpubImmutableData, MAX_IMMUTABLE_DATA_SIZE_IN_BYTES,
+pub use keys::{
+    BlsKeypair, BlsKeypairShare, BlsProof, BlsProofShare, Ed25519Proof, Keypair, Proof, Proven,
+    PublicKey, Signature, SignatureShare,
 };
-pub use keys::{BlsKeypair, BlsKeypairShare, Keypair, PublicKey, Signature};
-pub use mutable_data::{
-    Action as MDataAction, Address as MDataAddress, Data as MData, Entries as MDataEntries,
-    EntryActions as MDataEntryActions, Kind as MDataKind, PermissionSet as MDataPermissionSet,
-    SeqData as SeqMutableData, SeqEntries as MDataSeqEntries,
-    SeqEntryAction as MDataSeqEntryAction, SeqEntryActions as MDataSeqEntryActions,
-    SeqValue as MDataSeqValue, UnseqData as UnseqMutableData, UnseqEntries as MDataUnseqEntries,
-    UnseqEntryAction as MDataUnseqEntryAction, UnseqEntryActions as MDataUnseqEntryActions,
-    Value as MDataValue, Values as MDataValues,
+pub use map::{
+    Action as MapAction, Address as MapAddress, Data as Map, Entries as MapEntries,
+    EntryActions as MapEntryActions, Kind as MapKind, PermissionSet as MapPermissionSet,
+    SeqData as SeqMap, SeqEntries as MapSeqEntries, SeqEntryAction as MapSeqEntryAction,
+    SeqEntryActions as MapSeqEntryActions, SeqValue as MapSeqValue, UnseqData as UnseqMap,
+    UnseqEntries as MapUnseqEntries, UnseqEntryAction as MapUnseqEntryAction,
+    UnseqEntryActions as MapUnseqEntryActions, Value as MapValue, Values as MapValues,
 };
-pub use request::{
-    AuthorisationKind as RequestAuthKind, ClientRequest, CoinsRequest, IDataRequest, LoginPacket,
-    LoginPacketRequest, MDataRequest, Request, SDataRequest, Type as RequestType,
-    MAX_LOGIN_PACKET_BYTES,
+pub use messaging::{
+    Account, AccountRead, AccountWrite, Address, AdultDuties, AuthCmd, AuthQuery,
+    AuthorisationKind, BlobRead, BlobWrite, Cmd, CmdError, DataAuthKind, DataCmd, DataQuery, Duty,
+    ElderDuties, Event, MapRead, MapWrite, Message, MessageId, MiscAuthKind, MoneyAuthKind,
+    MsgEnvelope, MsgSender, NodeCmd, NodeCmdError, NodeDataCmd, NodeDataError, NodeDataQuery,
+    NodeDataQueryResponse, NodeDuties, NodeEvent, NodeQuery, NodeQueryResponse, NodeRewardError,
+    NodeRewardQuery, NodeRewardQueryResponse, NodeSystemCmd, NodeTransferCmd, NodeTransferError,
+    NodeTransferQuery, NodeTransferQueryResponse, Query, QueryResponse, SequenceRead,
+    SequenceWrite, TransferCmd, TransferError, TransferQuery, TryFromError, MAX_LOGIN_PACKET_BYTES,
 };
-pub use response::{Response, TryFromError};
-pub use sequence::{
-    Action as SDataAction, Address as SDataAddress, Data as SData, Entries as SDataEntries,
-    Entry as SDataEntry, Index as SDataIndex, Indices as SDataIndices, Kind as SDataKind,
-    MutationOperation as SDataMutationOperation, Owner as SDataOwner,
-    Permissions as SDataPermissions, PrivPermissions as SDataPrivPermissions, PrivSeqData,
-    PrivUserPermissions as SDataPrivUserPermissions, PubPermissions as SDataPubPermissions,
-    PubSeqData, PubUserPermissions as SDataPubUserPermissions, User as SDataUser,
-    UserPermissions as SDataUserPermissions,
-};
-pub use sha3::Sha3_512 as Ed25519Digest;
-pub use utils::verify_signature;
+pub use money::Money;
+pub use rewards::{RewardCounter, Work};
 
-use hex_fmt::HexFmt;
-use multibase::Decodable;
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
+pub use sequence::{
+    Action as SequenceAction, Address as SequenceAddress, Data as Sequence,
+    Entries as SequenceEntries, Entry as SequenceEntry, Index as SequenceIndex,
+    Indices as SequenceIndices, Kind as SequenceKind, Owner as SequenceOwner,
+    Permissions as SequencePermissions, PrivSeqData,
+    PrivUserPermissions as SequencePrivUserPermissions,
+    PrivatePermissions as SequencePrivatePermissions, PubSeqData,
+    PubUserPermissions as SequencePubUserPermissions,
+    PublicPermissions as SequencePublicPermissions, User as SequenceUser,
+    UserPermissions as SequenceUserPermissions, WriteOp as SequenceWriteOp,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{self, Debug, Display, Formatter},
-    net::SocketAddr,
-};
+pub use sha3::Sha3_512 as Ed25519Digest;
+pub use transfer::*;
+pub use utils::verify_signature;
+
+use std::{fmt::Debug, net::SocketAddr};
+use xor_name::XorName;
 
 /// Object storing a data variant.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum Data {
-    /// ImmutableData.
-    Immutable(IData),
+    /// Blob.
+    Immutable(Blob),
     /// MutableData.
-    Mutable(MData),
+    Mutable(Map),
     /// Sequence.
-    Sequence(SData),
+    Sequence(Sequence),
 }
 
 impl Data {
@@ -109,7 +112,7 @@ impl Data {
         match *self {
             Self::Immutable(ref idata) => idata.is_pub(),
             Self::Mutable(_) => false,
-            Self::Sequence(ref sdata) => sdata.is_pub(),
+            Self::Sequence(ref sequence) => sequence.is_pub(),
         }
     }
 
@@ -119,20 +122,20 @@ impl Data {
     }
 }
 
-impl From<IData> for Data {
-    fn from(data: IData) -> Self {
+impl From<Blob> for Data {
+    fn from(data: Blob) -> Self {
         Self::Immutable(data)
     }
 }
 
-impl From<MData> for Data {
-    fn from(data: MData) -> Self {
+impl From<Map> for Data {
+    fn from(data: Map) -> Self {
         Self::Mutable(data)
     }
 }
 
-impl From<SData> for Data {
-    fn from(data: SData) -> Self {
+impl From<Sequence> for Data {
+    fn from(data: Sequence) -> Self {
         Self::Sequence(data)
     }
 }
@@ -142,118 +145,14 @@ impl From<SData> for Data {
     Copy, Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize, Default, Debug,
 )]
 pub struct AppPermissions {
-    /// Whether this app has permissions to transfer coins.
-    pub transfer_coins: bool,
-    /// Whether this app has permissions to perform mutations.
-    pub perform_mutations: bool,
-    /// Whether this app has permissions to read the coin balance.
-    pub get_balance: bool,
-}
-
-/// Constant byte length of `XorName`.
-pub const XOR_NAME_LEN: usize = 32;
-
-/// A [`XOR_NAME_BITS`](constant.XOR_NAME_BITS.html)-bit number, viewed as a point in XOR space.
-///
-/// This wraps an array of [`XOR_NAME_LEN`](constant.XOR_NAME_LEN.html) bytes, i.e. a number
-/// between 0 and 2<sup>`XOR_NAME_BITS`</sup> - 1.
-///
-/// XOR space is the space of these numbers, with the [XOR metric][1] as a notion of distance,
-/// i. e. the points with IDs `x` and `y` are considered to have distance `x xor y`.
-///
-/// [1]: https://en.wikipedia.org/wiki/Kademlia#System_details
-#[derive(Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub struct XorName(pub [u8; XOR_NAME_LEN]);
-
-impl XorName {
-    /// Returns the `XorName` serialised and encoded in z-base-32.
-    pub fn encode_to_zbase32(&self) -> String {
-        utils::encode(&self)
-    }
-
-    /// Creates from z-base-32 encoded string.
-    pub fn decode_from_zbase32<I: Decodable>(encoded: I) -> Result<Self> {
-        utils::decode(encoded)
-    }
-}
-
-impl Debug for XorName {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(formatter, "{:<8}", HexFmt(&self.0))
-    }
-}
-
-impl Display for XorName {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        Debug::fmt(self, formatter)
-    }
-}
-
-impl Distribution<XorName> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> XorName {
-        XorName(rng.gen())
-    }
-}
-
-/// Wrapper message that contains a message ID and the requester ID along the request or response.
-/// It should also contain a valid signature if it's sent by the owner(s).
-#[allow(clippy::large_enum_variant)]
-#[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub enum Message {
-    /// Request with the message ID.
-    Request {
-        /// Request.
-        request: Request,
-        /// Associated message ID.
-        message_id: MessageId,
-        /// Signature of `(request, message_id)`. Optional if the request is read-only.
-        signature: Option<Signature>,
-    },
-    /// Response matched to the message ID.
-    Response {
-        /// Response.
-        response: Response,
-        /// Associated message ID.
-        message_id: MessageId,
-    },
-    /// Notification of a transaction.
-    Notification {
-        /// Notification.
-        notification: Notification,
-    },
-}
-
-impl Message {
-    /// Gets the message ID, if applicable.
-    pub fn message_id(&self) -> Option<MessageId> {
-        match self {
-            Self::Request { message_id, .. } | Self::Response { message_id, .. } => {
-                Some(*message_id)
-            }
-            Self::Notification { .. } => None,
-        }
-    }
-}
-
-/// Unique ID for messages.
-///
-/// This is used for deduplication: Since the network sends messages redundantly along different
-/// routes, the same message will usually arrive more than once at any given node. A message with
-/// an ID that is already in the cache will be ignored.
-#[derive(Ord, PartialOrd, Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Hash)]
-pub struct MessageId(pub XorName);
-
-impl MessageId {
-    /// Generates a new `MessageId` with random content.
-    pub fn new() -> Self {
-        Self(rand::random())
-    }
-}
-
-impl Default for MessageId {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Whether this app has permissions to perform data mutations.
+    pub data_mutations: bool,
+    /// Whether this app has permissions to transfer money.
+    pub transfer_money: bool,
+    /// Whether this app has permissions to read the account balance.
+    pub read_balance: bool,
+    /// Whether this app has permissions to read the account transfer history.
+    pub read_transfer_history: bool,
 }
 
 /// Handshake requests sent from clients to vaults to establish new connections and verify a client's
@@ -261,9 +160,9 @@ impl Default for MessageId {
 #[derive(Serialize, Deserialize)]
 pub enum HandshakeRequest {
     /// Sent by clients as an initial bootstrap request, and then for subsequent bootstrap attempts.
-    Bootstrap(PublicId),
+    Bootstrap(PublicKey),
     /// Sent to destination nodes as a response to `HandshakeResponse::Join`.
-    Join(PublicId),
+    Join(PublicKey),
     /// Response to `HandshakeResponse::Challenge` sent by a vault.
     ChallengeResult(Signature),
 }
@@ -278,37 +177,7 @@ pub enum HandshakeResponse {
     /// Sent by nodes when a client reaches its destination section.
     Join(Vec<(XorName, SocketAddr)>),
     /// Sent by nodes as a response to a valid `HandshakeRequest::Join`.
-    Challenge(PublicId, Vec<u8>),
+    Challenge(PublicKey, Vec<u8>),
     /// Sent by nodes as a response to an invalid `HandshakeRequest::Join` (when a client attempts to join a wrong section).
     InvalidSection,
-}
-
-/// Transaction ID.
-pub type TransactionId = u64; // TODO: Use the trait UUID
-
-/// Coin transaction.
-#[derive(Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
-pub struct Transaction {
-    /// Transaction ID.
-    pub id: TransactionId,
-    /// Amount of coins.
-    pub amount: Coins,
-}
-
-/// Notification of a transaction.
-#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize, Debug)]
-pub struct Notification(pub Transaction);
-
-#[cfg(test)]
-mod tests {
-    use crate::XorName;
-    use unwrap::unwrap;
-
-    #[test]
-    fn zbase32_encode_decode_xorname() {
-        let name = XorName(rand::random());
-        let encoded = name.encode_to_zbase32();
-        let decoded = unwrap!(XorName::decode_from_zbase32(&encoded));
-        assert_eq!(name, decoded);
-    }
 }

@@ -7,7 +7,6 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-pub mod app;
 pub mod client;
 pub mod node;
 
@@ -25,8 +24,6 @@ pub enum PublicId {
     Node(node::PublicId),
     /// The public identity of a network Client.
     Client(client::PublicId),
-    /// The public identity of a network App.
-    App(app::PublicId),
 }
 
 impl PublicId {
@@ -35,7 +32,6 @@ impl PublicId {
         match self {
             Self::Node(pub_id) => pub_id.name(),
             Self::Client(pub_id) => pub_id.name(),
-            Self::App(pub_id) => pub_id.owner_name(),
         }
     }
 
@@ -57,21 +53,11 @@ impl PublicId {
         }
     }
 
-    /// Returns the app public id, if applicable.
-    pub fn app_public_id(&self) -> Option<&app::PublicId> {
-        if let Self::App(id) = self {
-            Some(id)
-        } else {
-            None
-        }
-    }
-
     /// Returns the entity's public key, if applicable.
     pub fn public_key(&self) -> PublicKey {
         match self {
             Self::Node(pub_id) => (*pub_id.ed25519_public_key()).into(),
             Self::Client(pub_id) => *pub_id.public_key(),
-            Self::App(pub_id) => *pub_id.public_key(),
         }
     }
 
@@ -91,7 +77,6 @@ impl Debug for PublicId {
         match self {
             Self::Node(pub_id) => write!(formatter, "{:?}", pub_id),
             Self::Client(pub_id) => write!(formatter, "{:?}", pub_id),
-            Self::App(pub_id) => write!(formatter, "{:?}", pub_id),
         }
     }
 }
@@ -105,7 +90,7 @@ impl Display for PublicId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClientFullId, Error};
+    use crate::Error;
     use unwrap::unwrap;
 
     #[test]
@@ -134,7 +119,10 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut id = node::FullId::new(&mut rng);
         let bls_secret_key = threshold_crypto::SecretKeySet::random(1, &mut rng);
-        id.set_bls_keys(bls_secret_key.secret_key_share(0));
+        id.set_bls_keys(
+            bls_secret_key.secret_key_share(0),
+            bls_secret_key.public_keys(),
+        );
         assert_eq!(
             unwrap!(node::PublicId::decode_from_zbase32(
                 &id.public_id().encode_to_zbase32()
@@ -142,20 +130,6 @@ mod tests {
             *id.public_id()
         );
         assert!(node::PublicId::decode_from_zbase32("7djsk38").is_err());
-    }
-
-    #[test]
-    fn zbase32_encode_decode_app_public_id() {
-        let mut rng = rand::thread_rng();
-        let owner = ClientFullId::new_ed25519(&mut rng);
-        let id = app::FullId::new_ed25519(&mut rng, owner.public_id().clone());
-        assert_eq!(
-            unwrap!(app::PublicId::decode_from_zbase32(
-                &id.public_id().encode_to_zbase32()
-            )),
-            *id.public_id()
-        );
-        assert!(app::PublicId::decode_from_zbase32("7od8fh2").is_err());
     }
 
     #[test]

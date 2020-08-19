@@ -16,13 +16,13 @@ use std::{
     u64,
 };
 
-/// Maximum allowed size for a serialised ImmutableData to grow to.
-pub const MAX_IMMUTABLE_DATA_SIZE_IN_BYTES: u64 = 1024 * 1024 + 10 * 1024;
+/// Maximum allowed size for a serialised Blob to grow to.
+pub const MAX_BLOB_SIZE_IN_BYTES: u64 = 1024 * 1024 + 10 * 1024;
 
-/// Unpublished ImmutableData: an immutable chunk of data which can be deleted. Can only be fetched
+/// Private Blob: an immutable chunk of data which can be deleted. Can only be fetched
 /// by the listed owner.
 #[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone)]
-pub struct UnpubData {
+pub struct PrivateData {
     /// Network address. Omitted when serialising and calculated from the `value` and `owner` when
     /// deserialising.
     address: Address,
@@ -33,12 +33,12 @@ pub struct UnpubData {
     owner: PublicKey,
 }
 
-impl UnpubData {
-    /// Creates a new instance of `UnpubData`.
+impl PrivateData {
+    /// Creates a new instance of `PrivateData`.
     pub fn new(value: Vec<u8>, owner: PublicKey) -> Self {
         let hash_of_value = tiny_keccak::sha3_256(&value);
         let serialised_contents = utils::serialise(&(hash_of_value, &owner));
-        let address = Address::Unpub(XorName(tiny_keccak::sha3_256(&serialised_contents)));
+        let address = Address::Private(XorName(tiny_keccak::sha3_256(&serialised_contents)));
 
         Self {
             address,
@@ -79,33 +79,33 @@ impl UnpubData {
 
     /// Returns `true` if the size is valid.
     pub fn validate_size(&self) -> bool {
-        self.serialised_size() <= MAX_IMMUTABLE_DATA_SIZE_IN_BYTES
+        self.serialised_size() <= MAX_BLOB_SIZE_IN_BYTES
     }
 }
 
-impl Serialize for UnpubData {
+impl Serialize for PrivateData {
     fn serialize<S: Serializer>(&self, serialiser: S) -> Result<S::Ok, S::Error> {
         (&self.value, &self.owner).serialize(serialiser)
     }
 }
 
-impl<'de> Deserialize<'de> for UnpubData {
+impl<'de> Deserialize<'de> for PrivateData {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let (value, owner): (Vec<u8>, PublicKey) = Deserialize::deserialize(deserializer)?;
-        Ok(UnpubData::new(value, owner))
+        Ok(PrivateData::new(value, owner))
     }
 }
 
-impl Debug for UnpubData {
+impl Debug for PrivateData {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         // TODO: Output owners?
-        write!(formatter, "UnpubImmutableData {:?}", self.name())
+        write!(formatter, "PrivateBlob {:?}", self.name())
     }
 }
 
-/// Published ImmutableData: an immutable chunk of data which cannot be deleted.
+/// Public Blob: an immutable chunk of data which cannot be deleted.
 #[derive(Hash, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct PubData {
+pub struct PublicData {
     /// Network address. Omitted when serialising and calculated from the `value` when
     /// deserialising.
     address: Address,
@@ -113,11 +113,11 @@ pub struct PubData {
     value: Vec<u8>,
 }
 
-impl PubData {
-    /// Creates a new instance of `ImmutableData`.
+impl PublicData {
+    /// Creates a new instance of `Blob`.
     pub fn new(value: Vec<u8>) -> Self {
         Self {
-            address: Address::Pub(XorName(tiny_keccak::sha3_256(&value))),
+            address: Address::Public(XorName(tiny_keccak::sha3_256(&value))),
             value,
         }
     }
@@ -149,35 +149,35 @@ impl PubData {
 
     /// Returns true if the size is valid.
     pub fn validate_size(&self) -> bool {
-        self.serialised_size() <= MAX_IMMUTABLE_DATA_SIZE_IN_BYTES
+        self.serialised_size() <= MAX_BLOB_SIZE_IN_BYTES
     }
 }
 
-impl Serialize for PubData {
+impl Serialize for PublicData {
     fn serialize<S: Serializer>(&self, serialiser: S) -> Result<S::Ok, S::Error> {
         self.value.serialize(serialiser)
     }
 }
 
-impl<'de> Deserialize<'de> for PubData {
+impl<'de> Deserialize<'de> for PublicData {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value: Vec<u8> = Deserialize::deserialize(deserializer)?;
-        Ok(PubData::new(value))
+        Ok(PublicData::new(value))
     }
 }
 
-impl Debug for PubData {
+impl Debug for PublicData {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(formatter, "PubImmutableData {:?}", self.name())
+        write!(formatter, "PublicBloblob {:?}", self.name())
     }
 }
 
-/// Kind of an ImmutableData.
+/// Kind of an Blob.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum Kind {
-    /// Unpublished.
-    Unpub,
-    /// Published.
+    /// Private.
+    Private,
+    /// Public.
     Pub,
 }
 
@@ -187,7 +187,7 @@ impl Kind {
         if published {
             Kind::Pub
         } else {
-            Kind::Unpub
+            Kind::Private
         }
     }
 
@@ -202,36 +202,36 @@ impl Kind {
     }
 }
 
-/// Address of an ImmutableData.
+/// Address of an Blob.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum Address {
-    /// Unpublished namespace.
-    Unpub(XorName),
-    /// Published namespace.
-    Pub(XorName),
+    /// Private namespace.
+    Private(XorName),
+    /// Public namespace.
+    Public(XorName),
 }
 
 impl Address {
     /// Constructs an `Address` given `kind` and `name`.
     pub fn from_kind(kind: Kind, name: XorName) -> Self {
         match kind {
-            Kind::Pub => Address::Pub(name),
-            Kind::Unpub => Address::Unpub(name),
+            Kind::Pub => Address::Public(name),
+            Kind::Private => Address::Private(name),
         }
     }
 
     /// Returns the kind.
     pub fn kind(&self) -> Kind {
         match self {
-            Address::Unpub(_) => Kind::Unpub,
-            Address::Pub(_) => Kind::Pub,
+            Address::Private(_) => Kind::Private,
+            Address::Public(_) => Kind::Pub,
         }
     }
 
     /// Returns the name.
     pub fn name(&self) -> &XorName {
         match self {
-            Address::Unpub(ref name) | Address::Pub(ref name) => name,
+            Address::Private(ref name) | Address::Public(ref name) => name,
         }
     }
 
@@ -256,27 +256,35 @@ impl Address {
     }
 }
 
-/// Object storing an ImmutableData variant.
+/// Object storing an Blob variant.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum Data {
-    /// Unpublished ImmutableData.
-    Unpub(UnpubData),
-    /// Published ImmutableData.
-    Pub(PubData),
+    /// Private Blob.
+    Private(PrivateData),
+    /// Public Blob.
+    Public(PublicData),
 }
 
 impl Data {
     /// Returns the address.
     pub fn address(&self) -> &Address {
         match self {
-            Data::Unpub(data) => data.address(),
-            Data::Pub(data) => data.address(),
+            Data::Private(data) => data.address(),
+            Data::Public(data) => data.address(),
         }
     }
 
     /// Returns the name.
     pub fn name(&self) -> &XorName {
         self.address().name()
+    }
+
+    /// Returns the owner if private blob.
+    pub fn owner(&self) -> Option<&PublicKey> {
+        match self {
+            Data::Private(data) => Some(data.owner()),
+            _ => None,
+        }
     }
 
     /// Returns the kind.
@@ -297,43 +305,43 @@ impl Data {
     /// Returns the value.
     pub fn value(&self) -> &Vec<u8> {
         match self {
-            Data::Unpub(data) => data.value(),
-            Data::Pub(data) => data.value(),
+            Data::Private(data) => data.value(),
+            Data::Public(data) => data.value(),
         }
     }
 
     /// Returns `true` if the size is valid.
     pub fn validate_size(&self) -> bool {
         match self {
-            Data::Unpub(data) => data.validate_size(),
-            Data::Pub(data) => data.validate_size(),
+            Data::Private(data) => data.validate_size(),
+            Data::Public(data) => data.validate_size(),
         }
     }
 
     /// Returns size of this data after serialisation.
     pub fn serialised_size(&self) -> u64 {
         match self {
-            Data::Unpub(data) => data.serialised_size(),
-            Data::Pub(data) => data.serialised_size(),
+            Data::Private(data) => data.serialised_size(),
+            Data::Public(data) => data.serialised_size(),
         }
     }
 }
 
-impl From<UnpubData> for Data {
-    fn from(data: UnpubData) -> Self {
-        Data::Unpub(data)
+impl From<PrivateData> for Data {
+    fn from(data: PrivateData) -> Self {
+        Data::Private(data)
     }
 }
 
-impl From<PubData> for Data {
-    fn from(data: PubData) -> Self {
-        Data::Pub(data)
+impl From<PublicData> for Data {
+    fn from(data: PublicData) -> Self {
+        Data::Public(data)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{utils, Address, PubData, PublicKey, UnpubData, XorName};
+    use super::{utils, Address, PrivateData, PublicData, PublicKey, XorName};
     use bincode::deserialize as deserialise;
     use hex::encode;
     use rand::{self, Rng, SeedableRng};
@@ -350,10 +358,10 @@ mod tests {
         let owner1 = PublicKey::Bls(SecretKey::random().public_key());
         let owner2 = PublicKey::Bls(SecretKey::random().public_key());
 
-        let idata1 = UnpubData::new(data1.clone(), owner1);
-        let idata2 = UnpubData::new(data1, owner2);
-        let idata3 = UnpubData::new(data2.clone(), owner1);
-        let idata3_clone = UnpubData::new(data2, owner1);
+        let idata1 = PrivateData::new(data1.clone(), owner1);
+        let idata2 = PrivateData::new(data1, owner2);
+        let idata3 = PrivateData::new(data2.clone(), owner1);
+        let idata3_clone = PrivateData::new(data2, owner1);
 
         assert_eq!(idata3, idata3_clone);
 
@@ -365,11 +373,11 @@ mod tests {
     #[test]
     fn deterministic_test() {
         let value = "immutable data value".to_owned().into_bytes();
-        let immutable_data = PubData::new(value);
-        let immutable_data_name = encode(immutable_data.name().0.as_ref());
+        let blob = PublicData::new(value);
+        let blob_name = encode(blob.name().0.as_ref());
         let expected_name = "fac2869677ee06277633c37ac7e8e5c655f3d652f707c7a79fab930d584a3016";
 
-        assert_eq!(&expected_name, &immutable_data_name);
+        assert_eq!(&expected_name, &blob_name);
     }
 
     #[test]
@@ -377,10 +385,10 @@ mod tests {
         let mut rng = get_rng();
         let len = rng.gen_range(1, 10_000);
         let value = iter::repeat_with(|| rng.gen()).take(len).collect();
-        let immutable_data = PubData::new(value);
-        let serialised = utils::serialise(&immutable_data);
+        let blob = PublicData::new(value);
+        let serialised = utils::serialise(&blob);
         let parsed = unwrap!(deserialise(&serialised));
-        assert_eq!(immutable_data, parsed);
+        assert_eq!(blob, parsed);
     }
 
     fn get_rng() -> XorShiftRng {
@@ -407,7 +415,7 @@ mod tests {
     #[test]
     fn zbase32_encode_decode_idata_address() {
         let name = XorName(rand::random());
-        let address = Address::Pub(name);
+        let address = Address::Public(name);
         let encoded = address.encode_to_zbase32();
         let decoded = unwrap!(self::Address::decode_from_zbase32(&encoded));
         assert_eq!(address, decoded);
