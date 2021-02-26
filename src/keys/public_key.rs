@@ -48,6 +48,14 @@ impl PublicKey {
         }
     }
 
+    pub fn ed25519_from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(Self::Ed25519(
+            ed25519_dalek::PublicKey::from_bytes(bytes).map_err(|_| {
+                Error::FailedToParse("Could not deserialise Ed25519 secret key".to_string())
+            })?,
+        ))
+    }
+
     /// Returns the ed25519 key, if applicable.
     pub fn ed25519(&self) -> Option<ed25519_dalek::PublicKey> {
         if let Self::Ed25519(key) = self {
